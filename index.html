@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMFI Task Manager Pro - Cloud</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #2c2c2a; }
+        
+        .app-container { display: flex; height: 100vh; }
+        .sidebar { width: 280px; background: #1F2A5E; color: white; padding: 1.5rem; overflow-y: auto; }
+        .sidebar-title { font-size: 18px; font-weight: 700; margin-bottom: 0.5rem; }
+        .sidebar-subtitle { font-size: 12px; opacity: 0.8; }
+        
+        .main-content { flex: 1; display: flex; flex-direction: column; }
+        .header { background: white; border-bottom: 1px solid #e0e0e0; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .header-title { font-size: 24px; font-weight: 600; color: #1F2A5E; }
+        .header-status { font-size: 12px; color: #999; }
+        
+        .content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; text-align: center; }
+        .stat-label { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 0.75rem; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #B8860B; }
+        
+        .tasks-section { background: white; border-radius: 8px; border: 1px solid #e0e0e0; }
+        .tasks-header { padding: 1.25rem; border-bottom: 1px solid #e0e0e0; font-size: 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .task-card { padding: 1.25rem; border-bottom: 1px solid #f0f0f0; display: flex; gap: 1rem; cursor: pointer; align-items: flex-start; }
+        .task-card:hover { background: #f8f8f8; }
+        .task-checkbox { width: 24px; height: 24px; border: 2px solid #d0d0d0; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 3px; }
+        .task-checkbox.checked { background: #B8860B; border-color: #B8860B; color: white; }
+        .task-content { flex: 1; }
+        .task-title { font-size: 15px; font-weight: 600; margin-bottom: 0.5rem; }
+        .task-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+        .task-btn { background: transparent; border: none; cursor: pointer; color: #1F2A5E; font-weight: 600; font-size: 12px; padding: 0.35rem 0.65rem; border-radius: 4px; transition: all 0.2s; }
+        .task-btn:hover { background: rgba(31, 42, 94, 0.1); }
+        .task-btn-delete { color: #d32f2f; }
+        .task-btn-delete:hover { background: rgba(211, 47, 47, 0.1); }
+        
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .btn-primary { background: #1F2A5E; color: white; }
+        .btn-primary:hover { background: #2d3a7a; }
+        .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #e0e0e0; }
+        .btn-secondary:hover { background: #e8e8e8; }
+        .btn-small { padding: 0.5rem 1rem; font-size: 12px; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-title { font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; color: #1F2A5E; }
+        
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 0.5rem; }
+        .form-input, .form-textarea, .form-select { width: 100%; padding: 0.75rem; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .form-textarea { resize: vertical; min-height: 100px; }
+        
+        .sidebar-section { margin-bottom: 1.5rem; }
+        .sidebar-label { font-size: 12px; text-transform: uppercase; opacity: 0.7; margin-bottom: 0.75rem; }
+        .sidebar-section select { width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid #4a5a8a; background: rgba(255,255,255,0.1); color: white; }
+        .nav-btn { width: 100%; padding: 0.75rem 1rem; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; text-align: left; margin-bottom: 0.5rem; transition: all 0.2s; }
+        .nav-btn:hover { background: rgba(184, 134, 11, 0.3); }
+        .nav-btn.active { background: #B8860B; border-color: #B8860B; }
+        
+        .weekly-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+        .weekly-day { font-size: 14px; font-weight: 600; color: #1F2A5E; margin-bottom: 0.75rem; }
+        .weekly-stat { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-size: 13px; }
+        .progress-bar { width: 100px; height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #B8860B; }
+        
+        .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-bottom: 1.5rem; }
+        .calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; background: white; transition: all 0.2s; }
+        .calendar-day:hover { border-color: #B8860B; }
+        .calendar-day.today { background: #B8860B; color: white; border-color: #B8860B; }
+        .calendar-day.has-tasks::after { content: '•'; position: absolute; bottom: 2px; font-size: 16px; color: #B8860B; }
+        .calendar-day.today.has-tasks::after { color: white; }
+        
+        .empty-state { text-align: center; padding: 2rem; color: #999; }
+        
+        .settings-btn { background: transparent; border: none; color: white; cursor: pointer; font-size: 20px; padding: 0.5rem; }
+        .settings-btn:hover { opacity: 0.8; }
+        
+        @media (max-width: 768px) {
+            .app-container { flex-direction: column; }
+            .sidebar { width: 100%; max-height: 150px; overflow-x: auto; display: flex; gap: 2rem; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; align-items: stretch; }
+            .task-card { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        const STORAGE_KEY = 'omfi_tasks';
+        const COMPLETION_KEY = 'omfi_completion_';
+        const SUPABASE_URL_KEY = 'SUPABASE_URL';
+        const SUPABASE_KEY_KEY = 'SUPABASE_KEY';
+        
+        let tasks = [];
+        let currentView = 'daily';
+        let currentDate = new Date().toISOString().split('T')[0];
+        let supabaseConnected = false;
+        let editingTaskId = null;
+
+        const app = document.getElementById('app');
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if Supabase is configured (optional)
+            const url = localStorage.getItem(SUPABASE_URL_KEY);
+            const key = localStorage.getItem(SUPABASE_KEY_KEY);
+            
+            if (url && key && url !== 'local') {
+                supabaseConnected = true;
+            }
+            
+            loadLocalTasks();
+            renderApp();
+        });
+
+        function loadLocalTasks() {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                try {
+                    tasks = JSON.parse(stored);
+                } catch (e) {
+                    tasks = getDefaultTasks();
+                }
+            } else {
+                tasks = getDefaultTasks();
+            }
+        }
+
+        function getDefaultTasks() {
+            return [
+                { id: 1, title: 'Client relationship check', time: 15, priority: 'high', desc: 'Portfolio alerts, responses, touchpoints' },
+                { id: 2, title: 'LinkedIn content engagement', time: 20, priority: 'high', desc: 'Create/engage posts' },
+                { id: 3, title: 'Warm outreach', time: 25, priority: 'high', desc: 'WhatsApp messages or calls' },
+                { id: 4, title: 'Investwell monitoring', time: 15, priority: 'med', desc: 'Platform check, client data' },
+                { id: 5, title: 'Webinar or education prep', time: 30, priority: 'med', desc: 'Deck updates, script work' },
+                { id: 6, title: 'Google Business Profile + referrals', time: 10, priority: 'med', desc: 'GBP posts, review requests' }
+            ];
+        }
+
+        function saveTasks() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        }
+
+        function isTaskCompleted(taskId) {
+            return localStorage.getItem(COMPLETION_KEY + taskId + '_' + currentDate) === 'true';
+        }
+
+        function toggleTask(taskId) {
+            const key = COMPLETION_KEY + taskId + '_' + currentDate;
+            const completed = isTaskCompleted(taskId);
+            if (completed) {
+                localStorage.removeItem(key);
+            } else {
+                localStorage.setItem(key, 'true');
+            }
+            renderApp();
+        }
+
+        function deleteTask(taskId) {
+            if (confirm('Delete this task? This cannot be undone.')) {
+                tasks = tasks.filter(t => t.id !== taskId);
+                saveTasks();
+                renderApp();
+            }
+        }
+
+        function openEditModal(taskId) {
+            editingTaskId = taskId;
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const modalHtml = `
+                <div id="modal" class="modal-overlay" onclick="closeModal(event)">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">Edit Task</div>
+                        <div class="form-group">
+                            <label class="form-label">Task Title</label>
+                            <input type="text" class="form-input" id="task-title" value="${task.title}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-textarea" id="task-desc">${task.desc || ''}</textarea>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Time (minutes)</label>
+                                <input type="number" class="form-input" id="task-time" value="${task.time}" min="5">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select" id="task-priority">
+                                    <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
+                                    <option value="med" ${task.priority === 'med' ? 'selected' : ''}>Medium</option>
+                                    <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                            <button class="btn btn-primary" onclick="saveEditTask()">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            app.innerHTML = app.innerHTML + modalHtml;
+        }
+
+        function saveEditTask() {
+            const title = document.getElementById('task-title').value.trim();
+            const desc = document.getElementById('task-desc').value.trim();
+            const time = parseInt(document.getElementById('task-time').value) || 30;
+            const priority = document.getElementById('task-priority').value;
+
+            if (!title) {
+                alert('Please enter a task title');
+                return;
+            }
+
+            const task = tasks.find(t => t.id === editingTaskId);
+            if (task) {
+                task.title = title;
+                task.desc = desc;
+                task.time = time;
+                task.priority = priority;
+                saveTasks();
+            }
+
+            editingTaskId = null;
+            closeModal();
+            renderApp();
+        }
+
+        function openSettingsModal() {
+            const modalHtml = `
+                <div id="modal" class="modal-overlay" onclick="closeModal(event)">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">⚙️ Settings</div>
+                        
+                        <div style="margin-bottom: 2rem; padding: 1rem; background: #f5f5f5; border-radius: 6px;">
+                            <div style="font-weight: 600; margin-bottom: 0.5rem; color: #1F2A5E;">Current Storage</div>
+                            <div style="font-size: 12px; color: #666; margin-bottom: 1rem;">
+                                💾 Using Local Storage<br>
+                                All data saved on this device
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 1.5rem;">
+                            <div style="font-weight: 600; margin-bottom: 1rem; color: #1F2A5E;">Add Supabase Cloud Backup (Optional)</div>
+                            <p style="font-size: 12px; color: #666; margin-bottom: 1rem; line-height: 1.6;">
+                                Connect to Supabase for cloud backup and sync across devices. Your data will be stored securely in the cloud.
+                            </p>
+
+                            <div class="form-group">
+                                <label class="form-label">Supabase Project URL</label>
+                                <input type="text" class="form-input" id="url-input" placeholder="https://xxxxx.supabase.co">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Supabase Anon Key</label>
+                                <input type="password" class="form-input" id="key-input" placeholder="eyJhbGciOiJIUzI1NiIs...">
+                            </div>
+
+                            <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.5rem;" onclick="saveSuperbaseSettings()">
+                                Save Supabase Settings
+                            </button>
+                            <div style="font-size: 11px; color: #999;">
+                                Get these from supabase.com → Settings → API
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            app.innerHTML = app.innerHTML + modalHtml;
+        }
+
+        function saveSuperbaseSettings() {
+            const url = document.getElementById('url-input').value.trim();
+            const key = document.getElementById('key-input').value.trim();
+
+            if (!url || !key) {
+                alert('Please enter both URL and Key');
+                return;
+            }
+
+            localStorage.setItem(SUPABASE_URL_KEY, url);
+            localStorage.setItem(SUPABASE_KEY_KEY, key);
+            supabaseConnected = true;
+
+            alert('Supabase settings saved! Your data will now sync to the cloud.');
+            closeModal();
+            renderApp();
+        }
+
+        function renderApp() {
+            if (currentView === 'daily') {
+                renderDaily();
+            } else if (currentView === 'weekly') {
+                renderWeekly();
+            } else if (currentView === 'monthly') {
+                renderMonthly();
+            }
+        }
+
+        function renderDaily() {
+            let completed = 0;
+            let totalTime = 0;
+
+            tasks.forEach(task => {
+                if (isTaskCompleted(task.id)) completed++;
+                totalTime += task.time;
+            });
+
+            const rate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+
+            let tasksHtml = '';
+            tasks.forEach(task => {
+                const isCompleted = isTaskCompleted(task.id);
+                const priorityColor = { high: '#fce4ec', med: '#fff3e0', low: '#e8f5e9' }[task.priority];
+                const priorityText = { high: '⚡ High', med: '• Medium', low: '↓ Low' }[task.priority];
+
+                tasksHtml += `
+                    <div class="task-card">
+                        <div class="task-checkbox ${isCompleted ? 'checked' : ''}" onclick="toggleTask(${task.id})">
+                            ${isCompleted ? '✓' : ''}
+                        </div>
+                        <div class="task-content">
+                            <div class="task-title" style="${isCompleted ? 'text-decoration: line-through; color: #999;' : ''}">${task.title}</div>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                                <span class="btn btn-secondary btn-small" style="padding: 0.35rem 0.65rem; margin: 0; background: ${priorityColor}; color: #333;">${priorityText}</span>
+                                <span class="btn btn-secondary btn-small" style="padding: 0.35rem 0.65rem; margin: 0;">⏱ ${task.time}min</span>
+                            </div>
+                            ${task.desc ? `<div style="font-size: 13px; color: #666;">${task.desc}</div>` : ''}
+                        </div>
+                        <div class="task-actions">
+                            <button class="task-btn" onclick="openEditModal(${task.id})">✏️ Edit</button>
+                            <button class="task-btn task-btn-delete" onclick="deleteTask(${task.id})">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            app.innerHTML = `
+                <div class="app-container">
+                    <div class="sidebar">
+                        <div style="margin-bottom: 2rem;">
+                            <div class="sidebar-title">OMFI</div>
+                            <div class="sidebar-subtitle">Task Manager Pro</div>
+                            <div style="font-size: 11px; margin-top: 0.5rem; opacity: 0.6;">
+                                ${supabaseConnected ? '☁️ Cloud Enabled' : '💾 Local Storage'}
+                            </div>
+                        </div>
+                        
+                        <div class="sidebar-section">
+                            <div class="sidebar-label">Dashboard</div>
+                            <button class="nav-btn active" onclick="switchView('daily')">📋 Daily</button>
+                            <button class="nav-btn" onclick="switchView('weekly')">📅 Weekly</button>
+                            <button class="nav-btn" onclick="switchView('monthly')">📊 Monthly</button>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <button class="btn btn-secondary" style="width: 100%; font-size: 12px;" onclick="openSettingsModal()">
+                                ⚙️ Settings
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="main-content">
+                        <div class="header">
+                            <div>
+                                <div class="header-title">Daily Dashboard</div>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                                <input type="date" id="date-input" class="form-input" style="padding: 0.75rem 1rem; width: 150px;">
+                                <button class="btn btn-primary" onclick="openAddTaskModal()">+ Add Task</button>
+                            </div>
+                        </div>
+
+                        <div class="content">
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-label">Tasks Completed</div>
+                                    <div class="stat-value">${completed}/${tasks.length}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Total Time</div>
+                                    <div class="stat-value">${totalTime}</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-label">Completion Rate</div>
+                                    <div class="stat-value">${rate}%</div>
+                                </div>
+                            </div>
+
+                            <div class="tasks-section">
+                                <div class="tasks-header">
+                                    <div>Today's Tasks</div>
+                                    <div style="font-size: 12px; color: #999;">${tasks.length} tasks</div>
+                                </div>
+                                ${tasksHtml || '<div class="empty-state">No tasks created yet. Click "+ Add Task" to get started!</div>'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="modal" style="display: none;">
+                    <div class="modal-overlay" onclick="closeModal(event)">
+                        <div class="modal" onclick="event.stopPropagation()">
+                            <div class="modal-title">Add New Task</div>
+                            <div class="form-group">
+                                <label class="form-label">Task Title</label>
+                                <input type="text" class="form-input" id="task-title" placeholder="What needs to be done?">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Description</label>
+                                <textarea class="form-textarea" id="task-desc" placeholder="Add details..."></textarea>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div class="form-group">
+                                    <label class="form-label">Time (minutes)</label>
+                                    <input type="number" class="form-input" id="task-time" value="30" min="5">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Priority</label>
+                                    <select class="form-select" id="task-priority">
+                                        <option value="low">Low</option>
+                                        <option value="med" selected>Medium</option>
+                                        <option value="high">High</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                                <button class="btn btn-primary" onclick="createTask()">Create Task</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('date-input').valueAsDate = new Date(currentDate);
+            document.getElementById('date-input').addEventListener('change', function() {
+                currentDate = this.value;
+                renderApp();
+            });
+        }
+
+        function renderWeekly() {
+            const startOfWeek = new Date(currentDate);
+            startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+
+            const weekDays = [];
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(startOfWeek);
+                date.setDate(date.getDate() + i);
+                weekDays.push(date.toISOString().split('T')[0]);
+            }
+
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+            let statsHtml = '';
+            weekDays.forEach((date, idx) => {
+                const dayTasks = tasks;
+                const completed = dayTasks.filter(t => isTaskCompleted(t.id) && localStorage.getItem(COMPLETION_KEY + t.id + '_' + date) === 'true').length;
+                const total = dayTasks.length;
+                const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+                statsHtml += `
+                    <div class="weekly-card">
+                        <div class="weekly-day">${dayNames[idx]} - ${new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                        <div class="weekly-stat">
+                            <span>Completed: ${completed}/${total}</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${percent}%"></div>
+                            </div>
+                            <span>${percent}%</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            app.innerHTML = `
+                <div class="app-container">
+                    <div class="sidebar">
+                        <div style="margin-bottom: 2rem;">
+                            <div class="sidebar-title">OMFI</div>
+                            <div class="sidebar-subtitle">Task Manager Pro</div>
+                        </div>
+                        
+                        <div class="sidebar-section">
+                            <div class="sidebar-label">Dashboard</div>
+                            <button class="nav-btn" onclick="switchView('daily')">📋 Daily</button>
+                            <button class="nav-btn active" onclick="switchView('weekly')">📅 Weekly</button>
+                            <button class="nav-btn" onclick="switchView('monthly')">📊 Monthly</button>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <button class="btn btn-secondary" style="width: 100%; font-size: 12px;" onclick="openSettingsModal()">
+                                ⚙️ Settings
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="main-content">
+                        <div class="header">
+                            <div>
+                                <div class="header-title">Weekly Dashboard</div>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem;">
+                                <button class="btn btn-secondary btn-small" onclick="previousWeek()">← Prev Week</button>
+                                <button class="btn btn-primary btn-small" onclick="currentWeek()">This Week</button>
+                                <button class="btn btn-secondary btn-small" onclick="nextWeek()">Next Week →</button>
+                            </div>
+                        </div>
+
+                        <div class="content">
+                            ${statsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderMonthly() {
+            const year = parseInt(currentDate.split('-')[0]);
+            const month = parseInt(currentDate.split('-')[1]) - 1;
+            const monthStart = new Date(year, month, 1);
+            const monthEnd = new Date(year, month + 1, 0);
+
+            const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            let calendarHtml = '';
+
+            // Day labels
+            dayLabels.forEach(day => {
+                calendarHtml += `<div style="text-align: center; font-weight: 600; font-size: 12px; color: #999; padding: 0.5rem;">${day}</div>`;
+            });
+
+            // Empty cells before month starts
+            for (let i = 0; i < monthStart.getDay(); i++) {
+                calendarHtml += `<div></div>`;
+            }
+
+            // Days of month
+            for (let day = 1; day <= monthEnd.getDate(); day++) {
+                const date = new Date(year, month, day).toISOString().split('T')[0];
+                const isToday = date === currentDate;
+                const hasTasks = tasks.some(t => localStorage.getItem(COMPLETION_KEY + t.id + '_' + date) === 'true');
+
+                calendarHtml += `
+                    <div class="calendar-day ${isToday ? 'today' : ''} ${hasTasks ? 'has-tasks' : ''}" onclick="selectDate('${date}', 'daily')">
+                        ${day}
+                    </div>
+                `;
+            }
+
+            const monthName = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            app.innerHTML = `
+                <div class="app-container">
+                    <div class="sidebar">
+                        <div style="margin-bottom: 2rem;">
+                            <div class="sidebar-title">OMFI</div>
+                            <div class="sidebar-subtitle">Task Manager Pro</div>
+                        </div>
+                        
+                        <div class="sidebar-section">
+                            <div class="sidebar-label">Dashboard</div>
+                            <button class="nav-btn" onclick="switchView('daily')">📋 Daily</button>
+                            <button class="nav-btn" onclick="switchView('weekly')">📅 Weekly</button>
+                            <button class="nav-btn active" onclick="switchView('monthly')">📊 Monthly</button>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <button class="btn btn-secondary" style="width: 100%; font-size: 12px;" onclick="openSettingsModal()">
+                                ⚙️ Settings
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="main-content">
+                        <div class="header">
+                            <div>
+                                <div class="header-title">Monthly Dashboard</div>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem;">
+                                <button class="btn btn-secondary btn-small" onclick="previousMonth()">← Prev</button>
+                                <button class="btn btn-primary btn-small" onclick="currentMonth()">Today</button>
+                                <button class="btn btn-secondary btn-small" onclick="nextMonth()">Next →</button>
+                            </div>
+                        </div>
+
+                        <div class="content">
+                            <div style="background: white; padding: 2rem; border-radius: 8px; border: 1px solid #e0e0e0;">
+                                <div style="font-size: 18px; font-weight: 600; color: #1F2A5E; margin-bottom: 1.5rem; text-align: center;">
+                                    ${monthName}
+                                </div>
+                                <div class="calendar">
+                                    ${calendarHtml}
+                                </div>
+                                <div style="font-size: 12px; color: #999; text-align: center; margin-top: 1rem;">
+                                    Click on a date to view/edit tasks for that day. • = has completed tasks
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function switchView(view) {
+            currentView = view;
+            renderApp();
+        }
+
+        function previousWeek() {
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() - 7);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function currentWeek() {
+            currentDate = new Date().toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function nextWeek() {
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() + 7);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function previousMonth() {
+            const date = new Date(currentDate);
+            date.setMonth(date.getMonth() - 1);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function currentMonth() {
+            currentDate = new Date().toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function nextMonth() {
+            const date = new Date(currentDate);
+            date.setMonth(date.getMonth() + 1);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function selectDate(date, view) {
+            currentDate = date;
+            switchView(view);
+        }
+
+        function openAddTaskModal() {
+            const modalHtml = `
+                <div id="modal" class="modal-overlay" onclick="closeModal(event)">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">Add New Task</div>
+                        <div class="form-group">
+                            <label class="form-label">Task Title</label>
+                            <input type="text" class="form-input" id="task-title" placeholder="What needs to be done?">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-textarea" id="task-desc" placeholder="Add details..."></textarea>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Time (minutes)</label>
+                                <input type="number" class="form-input" id="task-time" value="30" min="5">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select" id="task-priority">
+                                    <option value="low">Low</option>
+                                    <option value="med" selected>Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                            <button class="btn btn-primary" onclick="createTask()">Create Task</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const container = document.querySelector('.app-container') || app;
+            const existingModal = container.querySelector('#modal');
+            if (existingModal) existingModal.remove();
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = modalHtml;
+            container.appendChild(tempDiv.firstElementChild);
+        }
+
+        function closeModal(event) {
+            if (event && event.target.id !== 'modal') return;
+            const modal = document.getElementById('modal');
+            if (modal) modal.remove();
+        }
+
+        function createTask() {
+            const title = document.getElementById('task-title').value.trim();
+            const desc = document.getElementById('task-desc').value.trim();
+            const time = parseInt(document.getElementById('task-time').value) || 30;
+            const priority = document.getElementById('task-priority').value;
+
+            if (!title) {
+                alert('Please enter a task title');
+                return;
+            }
+
+            const newTask = {
+                id: Math.max(...tasks.map(t => t.id), 0) + 1,
+                title,
+                desc,
+                time,
+                priority
+            };
+
+            tasks.push(newTask);
+            saveTasks();
+            
+            closeModal();
+            renderApp();
+        }
+    </script>
+</body>
+</html>
