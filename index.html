@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMFI Task Manager - Complete</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #2c2c2a; }
+        
+        .app-container { display: flex; height: 100vh; }
+        .sidebar { width: 280px; background: #1F2A5E; color: white; padding: 1.5rem; overflow-y: auto; }
+        .sidebar-title { font-size: 18px; font-weight: 700; margin-bottom: 0.5rem; }
+        .sidebar-subtitle { font-size: 12px; opacity: 0.8; }
+        
+        .main-content { flex: 1; display: flex; flex-direction: column; }
+        .header { background: white; border-bottom: 1px solid #e0e0e0; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .header-title { font-size: 24px; font-weight: 600; color: #1F2A5E; }
+        .status-indicator { display: flex; align-items: center; gap: 0.5rem; font-size: 12px; padding: 0.5rem 0.75rem; border-radius: 4px; }
+        .status-online { background: #e8f5e9; color: #2e7d32; }
+        .status-offline { background: #ffebee; color: #c62828; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        
+        .content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; text-align: center; }
+        .stat-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 0.75rem; }
+        .stat-value { font-size: 24px; font-weight: 700; color: #B8860B; }
+        
+        .tasks-section { background: white; border-radius: 8px; border: 1px solid #e0e0e0; }
+        .tasks-header { padding: 1.25rem; border-bottom: 1px solid #e0e0e0; font-size: 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .task-card { padding: 1.25rem; border-bottom: 1px solid #f0f0f0; display: flex; gap: 1rem; cursor: pointer; align-items: flex-start; position: relative; }
+        .task-card:hover { background: #f8f8f8; }
+        .task-content { flex: 1; }
+        .task-title { font-size: 15px; font-weight: 600; margin-bottom: 0.5rem; }
+        .task-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+        .task-btn { background: transparent; border: none; cursor: pointer; color: #1F2A5E; font-weight: 600; font-size: 12px; padding: 0.35rem 0.65rem; border-radius: 4px; transition: all 0.2s; }
+        .task-btn:hover { background: rgba(31, 42, 94, 0.1); }
+        .task-btn-delete { color: #d32f2f; }
+        .task-btn-delete:hover { background: rgba(211, 47, 47, 0.1); }
+        
+        .status-badge { display: inline-block; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+        .status-todo { background: #f0f0f0; color: #333; }
+        .status-inprogress { background: #fff3e0; color: #e65100; }
+        .status-blocked { background: #ffebee; color: #c62828; }
+        .status-completed { background: #e8f5e9; color: #2e7d32; }
+        
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .btn-primary { background: #1F2A5E; color: white; }
+        .btn-primary:hover { background: #2d3a7a; }
+        .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #e0e0e0; }
+        .btn-secondary:hover { background: #e8e8e8; }
+        .btn-small { padding: 0.5rem 1rem; font-size: 12px; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-title { font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; color: #1F2A5E; }
+        
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 0.5rem; }
+        .form-input, .form-textarea, .form-select { width: 100%; padding: 0.75rem; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .form-textarea { resize: vertical; min-height: 100px; }
+        
+        .sidebar-section { margin-bottom: 1.5rem; }
+        .sidebar-label { font-size: 12px; text-transform: uppercase; opacity: 0.7; margin-bottom: 0.75rem; }
+        .nav-btn { width: 100%; padding: 0.75rem 1rem; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; text-align: left; margin-bottom: 0.5rem; transition: all 0.2s; }
+        .nav-btn:hover { background: rgba(184, 134, 11, 0.3); }
+        .nav-btn.active { background: #B8860B; border-color: #B8860B; }
+        
+        .login-container { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f5f5f5; padding: 1rem; }
+        .login-card { background: white; padding: 2rem; border-radius: 8px; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .login-title { font-size: 24px; font-weight: 600; color: #1F2A5E; margin-bottom: 1.5rem; }
+        
+        .user-info { background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 12px; }
+        .user-email { opacity: 0.9; margin-bottom: 0.5rem; word-break: break-all; }
+        
+        .empty-state { text-align: center; padding: 2rem; color: #999; }
+        
+        .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-top: 1rem; }
+        .week-day { background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .week-day:hover { background: #f9f9f9; border-color: #B8860B; }
+        .week-day.today { background: #fff8e1; border: 2px solid #B8860B; }
+        .week-day-name { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 0.5rem; }
+        .week-day-date { font-size: 14px; font-weight: 600; color: #1F2A5E; margin-bottom: 0.5rem; }
+        .week-day-stat { font-size: 12px; color: #B8860B; }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-top: 1rem; }
+        .calendar-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-bottom: 1rem; }
+        .calendar-header-cell { text-align: center; font-weight: 600; color: #666; padding: 0.5rem; font-size: 12px; }
+        .calendar-cell { background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem; text-align: center; cursor: pointer; transition: all 0.2s; min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .calendar-cell:hover { background: #f9f9f9; border-color: #B8860B; }
+        .calendar-cell.today { background: #fff8e1; border: 2px solid #B8860B; }
+        .calendar-cell.other-month { color: #ccc; background: #fafafa; }
+        .calendar-cell-date { font-weight: 600; font-size: 14px; color: #1F2A5E; margin-bottom: 0.3rem; }
+        .calendar-cell-count { font-size: 11px; color: #666; }
+        
+        .nav-controls { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; justify-content: center; flex-wrap: wrap; }
+        .nav-controls button { padding: 0.5rem 1rem; font-size: 12px; }
+        
+        @media (max-width: 768px) {
+            .app-container { flex-direction: column; }
+            .sidebar { width: 100%; max-height: 150px; overflow-x: auto; display: flex; gap: 2rem; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .week-grid { grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); }
+            .calendar-grid { grid-template-columns: repeat(auto-fit, minmax(50px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        let supabase = null;
+        let currentUser = null;
+        let tasks = [];
+        let currentView = 'daily';
+        let currentDate = new Date().toISOString().split('T')[0];
+        let isOnline = navigator.onLine;
+
+        const app = document.getElementById('app');
+        const TASKS_KEY = 'omfi_tasks_v2';
+        const SUPABASE_URL_KEY = 'SUPABASE_URL';
+        const SUPABASE_KEY_KEY = 'SUPABASE_KEY';
+        const CLOUD_ENABLED_KEY = 'CLOUD_ENABLED';
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            window.addEventListener('online', () => {
+                isOnline = true;
+                updateStatusIndicator();
+            });
+            window.addEventListener('offline', () => {
+                isOnline = false;
+                updateStatusIndicator();
+            });
+            await initSupabase();
+        });
+
+        async function initSupabase() {
+            const url = localStorage.getItem(SUPABASE_URL_KEY);
+            const key = localStorage.getItem(SUPABASE_KEY_KEY);
+            const cloudEnabled = localStorage.getItem(CLOUD_ENABLED_KEY);
+
+            if (!url || !key || cloudEnabled === 'false') {
+                showSetupScreen();
+                return;
+            }
+
+            try {
+                supabase = window.supabase.createClient(url, key);
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    currentUser = user;
+                    await loadTasks();
+                    renderApp();
+                } else {
+                    showLoginScreen();
+                }
+            } catch (error) {
+                showSetupScreen();
+            }
+        }
+
+        function showSetupScreen() {
+            app.innerHTML = `
+                <div class="login-container">
+                    <div class="login-card">
+                        <div class="login-title">🚀 Setup Supabase</div>
+                        <div class="form-group">
+                            <label class="form-label">Supabase Project URL</label>
+                            <input type="text" class="form-input" id="url-input" placeholder="https://xxxxx.supabase.co">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Supabase Anon Key</label>
+                            <input type="password" class="form-input" id="key-input" placeholder="eyJhbGciOiJIUzI1NiIs...">
+                        </div>
+                        <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;" onclick="connectSupabase()">Save & Connect</button>
+                        <button class="btn btn-secondary" style="width: 100%;" onclick="useOfflineMode()">Offline Mode</button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('url-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') connectSupabase();
+            });
+            document.getElementById('key-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') connectSupabase();
+            });
+        }
+
+        async function connectSupabase() {
+            const url = document.getElementById('url-input').value.trim();
+            const key = document.getElementById('key-input').value.trim();
+
+            if (!url || !key) {
+                alert('Please enter both URL and Key');
+                return;
+            }
+
+            localStorage.setItem(SUPABASE_URL_KEY, url);
+            localStorage.setItem(SUPABASE_KEY_KEY, key);
+            localStorage.setItem(CLOUD_ENABLED_KEY, 'true');
+            alert('✅ Credentials saved!');
+            await initSupabase();
+        }
+
+        function useOfflineMode() {
+            localStorage.setItem(CLOUD_ENABLED_KEY, 'false');
+            currentUser = { id: 'offline_' + Date.now(), email: 'Offline User' };
+            loadOfflineTasks();
+            renderApp();
+        }
+
+        function showLoginScreen() {
+            app.innerHTML = `
+                <div class="login-container">
+                    <div class="login-card">
+                        <div class="login-title">👤 Login / Sign Up</div>
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-input" id="email-input" placeholder="you@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="password-input" placeholder="Enter password">
+                        </div>
+                        <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;" onclick="handleLogin()">Login</button>
+                        <button class="btn btn-secondary" style="width: 100%;" onclick="handleSignUp()">Create Account</button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('email-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+            document.getElementById('password-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value;
+
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                currentUser = data.user;
+                await loadTasks();
+                renderApp();
+            } catch (error) {
+                alert('Login failed: ' + error.message);
+            }
+        }
+
+        async function handleSignUp() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value;
+
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase.auth.signUp({ email, password });
+                if (error) throw error;
+                alert('✅ Account created! Please login.');
+                document.getElementById('password-input').value = '';
+            } catch (error) {
+                alert('Sign up failed: ' + error.message);
+            }
+        }
+
+        async function loadTasks() {
+            try {
+                if (isOnline && supabase && currentUser) {
+                    const { data, error } = await supabase
+                        .from('tasks')
+                        .select('*')
+                        .eq('user_id', currentUser.id);
+                    if (!error && data) {
+                        tasks = data;
+                        saveTasksLocally();
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.log('Loading from local');
+            }
+            loadOfflineTasks();
+        }
+
+        function loadOfflineTasks() {
+            const stored = localStorage.getItem(TASKS_KEY);
+            tasks = stored ? JSON.parse(stored) : getDefaultTasks();
+        }
+
+        function saveTasksLocally() {
+            localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+        }
+
+        function getDefaultTasks() {
+            return [
+                { id: Math.random(), title: 'Client relationship check', time: 15, priority: 'high', desc: 'Portfolio alerts, responses, touchpoints', status: 'todo', user_id: currentUser?.id, created_at: new Date().toISOString() },
+                { id: Math.random(), title: 'LinkedIn content engagement', time: 20, priority: 'high', desc: 'Create/engage posts', status: 'todo', user_id: currentUser?.id, created_at: new Date().toISOString() },
+                { id: Math.random(), title: 'Warm outreach', time: 25, priority: 'high', desc: 'WhatsApp messages or calls', status: 'todo', user_id: currentUser?.id, created_at: new Date().toISOString() },
+                { id: Math.random(), title: 'Investwell monitoring', time: 15, priority: 'med', desc: 'Platform check, client data', status: 'todo', user_id: currentUser?.id, created_at: new Date().toISOString() },
+                { id: Math.random(), title: 'Webinar or education prep', time: 30, priority: 'med', desc: 'Deck updates, script work', status: 'todo', user_id: currentUser?.id, created_at: new Date().toISOString() },
+                { id: Math.random(), title: 'Google Business Profile', time: 10, priority: 'med', desc: 'GBP posts, review requests', status: 'todo', user_id: currentUser?.id, created_at: new Date().toISOString() }
+            ];
+        }
+
+        async function createTask(taskData) {
+            const task = { 
+                ...taskData, 
+                id: Math.random(), 
+                status: 'todo',
+                user_id: currentUser?.id, 
+                created_at: new Date().toISOString() 
+            };
+            tasks.push(task);
+            saveTasksLocally();
+            
+            if (isOnline && supabase) {
+                try {
+                    await supabase.from('tasks').insert([task]);
+                } catch (error) {
+                    console.log('Will sync later');
+                }
+            }
+            renderApp();
+        }
+
+        async function updateTask(taskId, updates) {
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                Object.assign(task, updates);
+                saveTasksLocally();
+                
+                if (isOnline && supabase) {
+                    try {
+                        await supabase.from('tasks').update(updates).eq('id', taskId);
+                    } catch (error) {
+                        console.log('Will sync later');
+                    }
+                }
+                renderApp();
+            }
+        }
+
+        async function deleteTask(taskId) {
+            if (confirm('Delete this task?')) {
+                tasks = tasks.filter(t => t.id !== taskId);
+                saveTasksLocally();
+                
+                if (isOnline && supabase) {
+                    try {
+                        await supabase.from('tasks').delete().eq('id', taskId);
+                    } catch (error) {
+                        console.log('Will sync later');
+                    }
+                }
+                renderApp();
+            }
+        }
+
+        function updateStatusIndicator() {
+            const indicator = document.querySelector('.status-indicator');
+            if (indicator) {
+                indicator.innerHTML = isOnline ? '<span class="status-dot"></span> Online' : '<span class="status-dot"></span> Offline';
+                indicator.className = isOnline ? 'status-indicator status-online' : 'status-indicator status-offline';
+            }
+        }
+
+        function renderApp() {
+            let stats = { todo: 0, inprogress: 0, blocked: 0, completed: 0 };
+            let totalTime = 0;
+
+            tasks.forEach(task => {
+                totalTime += task.time;
+                if (task.status === 'todo') stats.todo++;
+                else if (task.status === 'inprogress') stats.inprogress++;
+                else if (task.status === 'blocked') stats.blocked++;
+                else if (task.status === 'completed') stats.completed++;
+            });
+
+            let content = '';
+
+            if (currentView === 'daily') {
+                content = renderDaily(stats, totalTime);
+            } else if (currentView === 'weekly') {
+                content = renderWeekly(stats, totalTime);
+            } else if (currentView === 'monthly') {
+                content = renderMonthly(stats, totalTime);
+            }
+
+            app.innerHTML = `
+                <div class="app-container">
+                    <div class="sidebar">
+                        <div style="margin-bottom:1.5rem">
+                            <div class="sidebar-title">OMFI</div>
+                            <div class="sidebar-subtitle">Task Manager Pro</div>
+                        </div>
+                        <div class="user-info">
+                            <div class="user-email">👤 ${currentUser?.email || 'Offline'}</div>
+                            <button class="btn btn-secondary btn-small" style="width:100%;margin-top:0.5rem" onclick="logout()">Logout</button>
+                        </div>
+                        <div class="sidebar-section">
+                            <div class="sidebar-label">Dashboard</div>
+                            <button class="nav-btn ${currentView==='daily'?'active':''}" onclick="currentView='daily';renderApp()">📋 Daily</button>
+                            <button class="nav-btn ${currentView==='weekly'?'active':''}" onclick="currentView='weekly';renderApp()">📅 Weekly</button>
+                            <button class="nav-btn ${currentView==='monthly'?'active':''}" onclick="currentView='monthly';renderApp()">📊 Monthly</button>
+                        </div>
+                    </div>
+                    <div class="main-content">
+                        <div class="header">
+                            <div class="header-title">${currentView==='daily'?'📋 Daily':currentView==='weekly'?'📅 Weekly':'📊 Monthly'}</div>
+                            <div style="display:flex;gap:0.75rem;align-items:center">
+                                <div class="status-indicator status-online"><span class="status-dot"></span> Online</div>
+                                ${currentView==='daily'?`<input type="date" id="dateInput" style="padding:0.75rem;border:1px solid #d0d0d0;border-radius:6px">`:''} 
+                                <button class="btn btn-primary" onclick="openAddModal()">+ Add Task</button>
+                            </div>
+                        </div>
+                        ${content}
+                    </div>
+                </div>
+            `;
+
+            updateStatusIndicator();
+
+            if (currentView === 'daily') {
+                const dateInput = document.getElementById('dateInput');
+                if (dateInput) {
+                    dateInput.valueAsDate = new Date(currentDate);
+                    dateInput.onchange = function() { currentDate = this.value; renderApp(); };
+                }
+            }
+        }
+
+        function renderDaily(stats, totalTime) {
+            let tasksHtml = '';
+            tasks.forEach(task => {
+                // Ensure every task has a status
+                if (!task.status) task.status = 'todo';
+                
+                const statusClasses = {
+                    'todo': 'status-todo',
+                    'inprogress': 'status-inprogress',
+                    'blocked': 'status-blocked',
+                    'completed': 'status-completed'
+                };
+                const statusLabels = {
+                    'todo': '📋 To Do',
+                    'inprogress': '⚡ In Progress',
+                    'blocked': '🚫 Blocked',
+                    'completed': '✅ Completed'
+                };
+                const colors = { high: '#fce4ec', med: '#fff3e0', low: '#e8f5e9' };
+                const labels = { high: '⚡ High', med: '• Med', low: '↓ Low' };
+
+                tasksHtml += `
+                    <div class="task-card">
+                        <div class="task-content">
+                            <div class="task-title" style="${task.status==='completed'?'text-decoration:line-through;color:#999':''}">${task.title}</div>
+                            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
+                                <span class="status-badge ${statusClasses[task.status]}" onclick="openStatusMenu('${task.id}')" style="cursor:pointer">${statusLabels[task.status]}</span>
+                                <span class="btn btn-secondary btn-small" style="padding:0.35rem 0.65rem;margin:0;background:${colors[task.priority]}">${labels[task.priority]}</span>
+                                <span class="btn btn-secondary btn-small" style="padding:0.35rem 0.65rem;margin:0">⏱ ${task.time}min</span>
+                            </div>
+                            ${task.desc?`<div style="font-size:13px;color:#666">${task.desc}</div>`:''}
+                        </div>
+                        <div class="task-actions">
+                            <button class="task-btn" onclick="openEditModal('${task.id}')">✏️</button>
+                            <button class="task-btn task-btn-delete" onclick="deleteTask('${task.id}')">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            return `
+                <div class="content">
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-label">To Do</div><div class="stat-value">${stats.todo}</div></div>
+                        <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value">${stats.inprogress}</div></div>
+                        <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-value">${stats.blocked}</div></div>
+                        <div class="stat-card"><div class="stat-label">Completed</div><div class="stat-value">${stats.completed}</div></div>
+                    </div>
+                    <div class="tasks-section">
+                        <div class="tasks-header">Tasks (${tasks.length})</div>
+                        ${tasksHtml || '<div class="empty-state">No tasks yet</div>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderWeekly(stats, totalTime) {
+            const today = new Date(currentDate);
+            const start = new Date(today);
+            start.setDate(today.getDate() - today.getDay());
+
+            let weekHtml = '<div class="week-grid">';
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(start);
+                d.setDate(start.getDate() + i);
+                const dateStr = d.toISOString().split('T')[0];
+                const isToday = dateStr === currentDate;
+                const cnt = tasks.length;
+
+                weekHtml += `
+                    <div class="week-day ${isToday?'today':''}" onclick="currentDate='${dateStr}';currentView='daily';renderApp()">
+                        <div class="week-day-name">${days[i]}</div>
+                        <div class="week-day-date">${d.getDate()}</div>
+                        <div class="week-day-stat">${cnt} tasks</div>
+                    </div>
+                `;
+            }
+            weekHtml += '</div>';
+
+            return `
+                <div class="content">
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-label">To Do</div><div class="stat-value">${stats.todo}</div></div>
+                        <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value">${stats.inprogress}</div></div>
+                        <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-value">${stats.blocked}</div></div>
+                        <div class="stat-card"><div class="stat-label">Completed</div><div class="stat-value">${stats.completed}</div></div>
+                    </div>
+                    <div class="tasks-section">
+                        <div class="tasks-header">Week Overview</div>
+                        ${weekHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderMonthly(stats, totalTime) {
+            const today = new Date(currentDate);
+            const year = today.getFullYear();
+            const month = today.getMonth();
+            const first = new Date(year, month, 1);
+            const start = new Date(first);
+            start.setDate(start.getDate() - first.getDay());
+
+            let headerHtml = '<div class="calendar-header">';
+            ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+                headerHtml += `<div class="calendar-header-cell">${d}</div>`;
+            });
+            headerHtml += '</div>';
+
+            let calHtml = '<div class="calendar-grid">';
+            let d = new Date(start);
+
+            for (let i = 0; i < 42; i++) {
+                const dateStr = d.toISOString().split('T')[0];
+                const isToday = dateStr === currentDate;
+                const otherMonth = d.getMonth() !== month;
+                const cnt = tasks.length;
+
+                calHtml += `
+                    <div class="calendar-cell ${isToday?'today':''} ${otherMonth?'other-month':''}" onclick="currentDate='${dateStr}';currentView='daily';renderApp()">
+                        <div class="calendar-cell-date">${d.getDate()}</div>
+                        ${cnt>0?`<div class="calendar-cell-count">${cnt} tasks</div>`:''}
+                    </div>
+                `;
+                d.setDate(d.getDate() + 1);
+            }
+            calHtml += '</div>';
+
+            return `
+                <div class="content">
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-label">To Do</div><div class="stat-value">${stats.todo}</div></div>
+                        <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value">${stats.inprogress}</div></div>
+                        <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-value">${stats.blocked}</div></div>
+                        <div class="stat-card"><div class="stat-label">Completed</div><div class="stat-value">${stats.completed}</div></div>
+                    </div>
+                    <div class="tasks-section">
+                        <div class="tasks-header">${first.toLocaleString('default',{month:'long',year:'numeric'})}</div>
+                        ${headerHtml}${calHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function openStatusMenu(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const statusOptions = ['todo', 'inprogress', 'blocked', 'completed'];
+            const statusLabels = {
+                'todo': '📋 To Do',
+                'inprogress': '⚡ In Progress',
+                'blocked': '🚫 Blocked',
+                'completed': '✅ Completed'
+            };
+
+            const menuId = 'menu_' + Date.now();
+            let menuHtml = `
+                <div id="${menuId}" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:999" onclick="document.getElementById('${menuId}').remove()"></div>
+                <div style="position:fixed;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:1000;min-width:160px;top:50%;left:50%;transform:translate(-50%,-50%)">
+            `;
+            
+            statusOptions.forEach(status => {
+                menuHtml += `
+                    <div style="padding:0.75rem 1rem;cursor:pointer;border-bottom:1px solid #f0f0f0;hover:background:#f5f5f5" onclick="changeTaskStatus('${taskId}', '${status}')">
+                        ${statusLabels[status]}
+                    </div>
+                `;
+            });
+
+            menuHtml += '</div>';
+
+            const div = document.createElement('div');
+            div.innerHTML = menuHtml;
+            document.body.appendChild(div);
+        }
+
+        function changeTaskStatus(taskId, newStatus) {
+            updateTask(taskId, { status: newStatus });
+            // Remove menu
+            const menus = document.querySelectorAll('[style*="position:fixed"][style*="z-index:999"]');
+            menus.forEach(m => m.remove());
+            const menuBg = document.querySelectorAll('[style*="position:fixed"][style*="z-index:1000"]');
+            menuBg.forEach(m => m.remove());
+        }
+
+        function openEditModal(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const modalId = 'edit_' + Date.now();
+            const titleId = 'title_' + Date.now();
+            const descId = 'desc_' + Date.now();
+            const timeId = 'time_' + Date.now();
+            const prioId = 'prio_' + Date.now();
+
+            const html = `
+                <div id="${modalId}" class="modal-overlay" onclick="if(event.target.id==='${modalId}')document.getElementById('${modalId}').remove()">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">Edit Task</div>
+                        <div class="form-group">
+                            <label class="form-label">Title</label>
+                            <input type="text" class="form-input" id="${titleId}" value="${task.title}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-textarea" id="${descId}">${task.desc || ''}</textarea>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                            <div class="form-group">
+                                <label class="form-label">Time (min)</label>
+                                <input type="number" class="form-input" id="${timeId}" value="${task.time}">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select" id="${prioId}">
+                                    <option value="low" ${task.priority==='low'?'selected':''}>Low</option>
+                                    <option value="med" ${task.priority==='med'?'selected':''}>Medium</option>
+                                    <option value="high" ${task.priority==='high'?'selected':''}>High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:2rem">
+                            <button class="btn btn-secondary" onclick="document.getElementById('${modalId}').remove()">Cancel</button>
+                            <button class="btn btn-primary" onclick="saveEdit('${modalId}','${taskId}','${titleId}','${descId}','${timeId}','${prioId}')">Save</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        async function saveEdit(modalId, taskId, titleId, descId, timeId, prioId) {
+            const title = document.getElementById(titleId).value.trim();
+            const desc = document.getElementById(descId).value.trim();
+            const time = parseInt(document.getElementById(timeId).value) || 30;
+            const priority = document.getElementById(prioId).value;
+
+            if (!title) {
+                alert('Enter a title');
+                return;
+            }
+
+            await updateTask(taskId, { title, desc, time, priority });
+            document.getElementById(modalId).remove();
+        }
+
+        function openAddModal() {
+            const id = 'add_' + Date.now();
+            const tidId = 'tid_' + Date.now();
+            const desId = 'des_' + Date.now();
+            const timId = 'tim_' + Date.now();
+            const priId = 'pri_' + Date.now();
+
+            const html = `
+                <div id="${id}" class="modal-overlay" onclick="if(event.target.id==='${id}')document.getElementById('${id}').remove()">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">Add Task</div>
+                        <div class="form-group">
+                            <label class="form-label">Title</label>
+                            <input type="text" class="form-input" id="${tidId}" placeholder="Task name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-textarea" id="${desId}" placeholder="Details..."></textarea>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                            <div class="form-group">
+                                <label class="form-label">Time (min)</label>
+                                <input type="number" class="form-input" id="${timId}" value="30">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select" id="${priId}">
+                                    <option value="low">Low</option>
+                                    <option value="med" selected>Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:2rem">
+                            <button class="btn btn-secondary" onclick="document.getElementById('${id}').remove()">Cancel</button>
+                            <button class="btn btn-primary" onclick="addTask('${id}','${tidId}','${desId}','${timId}','${priId}')">Create</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        async function addTask(modId, tidId, desId, timId, priId) {
+            const title = document.getElementById(tidId).value.trim();
+            const desc = document.getElementById(desId).value.trim();
+            const time = parseInt(document.getElementById(timId).value) || 30;
+            const priority = document.getElementById(priId).value;
+
+            if (!title) {
+                alert('Enter a title');
+                return;
+            }
+
+            await createTask({ title, desc, time, priority });
+            document.getElementById(modId).remove();
+        }
+
+        async function logout() {
+            if (confirm('Logout?')) {
+                if (supabase) await supabase.auth.signOut();
+                currentUser = null;
+                tasks = [];
+                showLoginScreen();
+            }
+        }
+    </script>
+</body>
+</html>
