@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMFI Task Manager - Offline-First Cloud</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #2c2c2a; }
+        
+        .app-container { display: flex; height: 100vh; }
+        .sidebar { width: 280px; background: #1F2A5E; color: white; padding: 1.5rem; overflow-y: auto; }
+        .sidebar-title { font-size: 18px; font-weight: 700; margin-bottom: 0.5rem; }
+        .sidebar-subtitle { font-size: 12px; opacity: 0.8; }
+        
+        .main-content { flex: 1; display: flex; flex-direction: column; }
+        .header { background: white; border-bottom: 1px solid #e0e0e0; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .header-title { font-size: 24px; font-weight: 600; color: #1F2A5E; }
+        .status-indicator { display: flex; align-items: center; gap: 0.5rem; font-size: 12px; padding: 0.5rem 0.75rem; border-radius: 4px; }
+        .status-online { background: #e8f5e9; color: #2e7d32; }
+        .status-offline { background: #ffebee; color: #c62828; }
+        .status-syncing { background: #fff3e0; color: #e65100; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        
+        .content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; text-align: center; }
+        .stat-label { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 0.75rem; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #B8860B; }
+        
+        .tasks-section { background: white; border-radius: 8px; border: 1px solid #e0e0e0; }
+        .tasks-header { padding: 1.25rem; border-bottom: 1px solid #e0e0e0; font-size: 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .task-card { padding: 1.25rem; border-bottom: 1px solid #f0f0f0; display: flex; gap: 1rem; cursor: pointer; align-items: flex-start; position: relative; }
+        .task-card:hover { background: #f8f8f8; }
+        .task-card.pending::before { content: '⟳'; position: absolute; right: 1rem; top: 1.5rem; color: #B8860B; font-weight: bold; font-size: 14px; }
+        .task-checkbox { width: 24px; height: 24px; border: 2px solid #d0d0d0; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 3px; }
+        .task-checkbox.checked { background: #B8860B; border-color: #B8860B; color: white; }
+        .task-content { flex: 1; }
+        .task-title { font-size: 15px; font-weight: 600; margin-bottom: 0.5rem; }
+        .task-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+        .task-btn { background: transparent; border: none; cursor: pointer; color: #1F2A5E; font-weight: 600; font-size: 12px; padding: 0.35rem 0.65rem; border-radius: 4px; transition: all 0.2s; }
+        .task-btn:hover { background: rgba(31, 42, 94, 0.1); }
+        .task-btn-delete { color: #d32f2f; }
+        .task-btn-delete:hover { background: rgba(211, 47, 47, 0.1); }
+        
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .btn-primary { background: #1F2A5E; color: white; }
+        .btn-primary:hover { background: #2d3a7a; }
+        .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #e0e0e0; }
+        .btn-secondary:hover { background: #e8e8e8; }
+        .btn-small { padding: 0.5rem 1rem; font-size: 12px; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: white; border-radius: 8px; padding: 2rem; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-title { font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; color: #1F2A5E; }
+        
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 0.5rem; }
+        .form-input, .form-textarea, .form-select { width: 100%; padding: 0.75rem; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        .form-textarea { resize: vertical; min-height: 100px; }
+        
+        .sidebar-section { margin-bottom: 1.5rem; }
+        .sidebar-label { font-size: 12px; text-transform: uppercase; opacity: 0.7; margin-bottom: 0.75rem; }
+        .nav-btn { width: 100%; padding: 0.75rem 1rem; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; text-align: left; margin-bottom: 0.5rem; transition: all 0.2s; }
+        .nav-btn:hover { background: rgba(184, 134, 11, 0.3); }
+        .nav-btn.active { background: #B8860B; border-color: #B8860B; }
+        
+        .login-container { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f5f5f5; padding: 1rem; }
+        .login-card { background: white; padding: 2rem; border-radius: 8px; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .login-title { font-size: 24px; font-weight: 600; color: #1F2A5E; margin-bottom: 1.5rem; }
+        .login-text { color: #666; line-height: 1.6; margin-bottom: 1.5rem; font-size: 14px; }
+        
+        .success-badge { background: #e8f5e9; border: 1px solid #4caf50; color: #2e7d32; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
+        .success-badge::before { content: '✓'; font-size: 18px; font-weight: bold; }
+        
+        .info-box { background: #e3f2fd; border: 1px solid #2196f3; color: #1565c0; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.6; }
+        
+        .credential-display { background: #f5f5f5; border: 1px solid #d0d0d0; border-radius: 6px; padding: 1rem; margin-bottom: 1.5rem; font-size: 12px; font-family: monospace; }
+        .credential-label { font-weight: 600; color: #666; margin-bottom: 0.5rem; }
+        .credential-value { background: white; padding: 0.5rem; border-radius: 4px; border: 1px solid #e0e0e0; overflow-wrap: break-word; word-break: break-all; margin-bottom: 1rem; }
+        
+        .user-info { background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-size: 12px; }
+        .user-email { opacity: 0.9; margin-bottom: 0.5rem; word-break: break-all; }
+        
+        .empty-state { text-align: center; padding: 2rem; color: #999; }
+        
+        .sync-indicator { position: fixed; bottom: 20px; right: 20px; background: #B8860B; color: white; padding: 0.75rem 1rem; border-radius: 6px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 900; animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        
+        .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; margin-top: 1rem; }
+        .week-day { background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .week-day:hover { background: #f9f9f9; border-color: #B8860B; }
+        .week-day.today { background: #fff8e1; border: 2px solid #B8860B; }
+        .week-day-name { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 0.5rem; }
+        .week-day-date { font-size: 14px; font-weight: 600; color: #1F2A5E; margin-bottom: 0.5rem; }
+        .week-day-stat { font-size: 12px; color: #B8860B; }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-top: 1rem; }
+        .calendar-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-bottom: 1rem; }
+        .calendar-header-cell { text-align: center; font-weight: 600; color: #666; padding: 0.5rem; font-size: 12px; }
+        .calendar-cell { background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem; text-align: center; cursor: pointer; transition: all 0.2s; min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .calendar-cell:hover { background: #f9f9f9; border-color: #B8860B; }
+        .calendar-cell.today { background: #fff8e1; border: 2px solid #B8860B; }
+        .calendar-cell.other-month { color: #ccc; background: #fafafa; }
+        .calendar-cell-date { font-weight: 600; font-size: 14px; color: #1F2A5E; margin-bottom: 0.3rem; }
+        .calendar-cell-dot { width: 6px; height: 6px; border-radius: 50%; background: #B8860B; display: inline-block; margin: 0 2px; }
+        .calendar-cell-count { font-size: 11px; color: #666; }
+        
+        .nav-controls { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+        .nav-controls button { padding: 0.5rem 1rem; font-size: 12px; }
+        
+        @media (max-width: 768px) {
+            .app-container { flex-direction: column; }
+            .sidebar { width: 100%; max-height: 150px; overflow-x: auto; display: flex; gap: 2rem; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .two-column { grid-template-columns: 1fr; }
+            .week-grid { grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); }
+            .calendar-grid { grid-template-columns: repeat(auto-fit, minmax(50px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        let supabase = null;
+        let currentUser = null;
+        let tasks = [];
+        let pendingChanges = [];
+        let currentView = 'daily';
+        let currentDate = new Date().toISOString().split('T')[0];
+        let editingTaskId = null;
+        let isOnline = navigator.onLine;
+        let isSyncing = false;
+
+        const app = document.getElementById('app');
+        const OFFLINE_STORAGE_KEY = 'omfi_offline_tasks';
+        const PENDING_CHANGES_KEY = 'omfi_pending_changes';
+        const COMPLETION_KEY = 'omfi_completion_';
+        const SUPABASE_URL_KEY = 'SUPABASE_URL';
+        const SUPABASE_KEY_KEY = 'SUPABASE_KEY';
+        const CLOUD_ENABLED_KEY = 'CLOUD_ENABLED';
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            window.addEventListener('online', () => {
+                isOnline = true;
+                updateStatusIndicator();
+                syncPendingChanges();
+            });
+            window.addEventListener('offline', () => {
+                isOnline = false;
+                updateStatusIndicator();
+            });
+
+            await initSupabase();
+        });
+
+        async function initSupabase() {
+            const url = localStorage.getItem(SUPABASE_URL_KEY);
+            const key = localStorage.getItem(SUPABASE_KEY_KEY);
+            const cloudEnabled = localStorage.getItem(CLOUD_ENABLED_KEY);
+
+            if (!url || !key || cloudEnabled === 'false') {
+                showSetupScreen();
+                return;
+            }
+
+            try {
+                supabase = window.supabase.createClient(url, key);
+                
+                const { data: { user } } = await supabase.auth.getUser();
+                
+                if (user) {
+                    currentUser = user;
+                    await loadTasks();
+                    renderApp();
+                } else {
+                    showLoginScreen();
+                }
+            } catch (error) {
+                console.error('Error initializing Supabase:', error);
+                showSetupScreen();
+            }
+        }
+
+        function showSetupScreen() {
+            const savedUrl = localStorage.getItem(SUPABASE_URL_KEY);
+            const savedKey = localStorage.getItem(SUPABASE_KEY_KEY);
+            const hasSavedCredentials = savedUrl && savedKey;
+
+            if (hasSavedCredentials) {
+                app.innerHTML = `
+                    <div class="login-container">
+                        <div class="login-card">
+                            <div class="login-title">✅ Credentials Saved</div>
+                            
+                            <div class="success-badge">
+                                Supabase credentials are saved on this device
+                            </div>
+
+                            <div class="credential-display">
+                                <div class="credential-label">Project URL (Saved):</div>
+                                <div class="credential-value">${savedUrl}</div>
+                                <div class="credential-label">Anon Key (Saved):</div>
+                                <div class="credential-value">${savedKey.substring(0, 20)}...${savedKey.substring(savedKey.length - 10)}</div>
+                            </div>
+
+                            <div class="info-box">
+                                💾 Your credentials are stored securely on this device. You won't need to enter them again!
+                            </div>
+
+                            <div class="two-column">
+                                <button class="btn btn-primary" style="width: 100%;" onclick="continueWithSavedCredentials()">
+                                    Continue Login
+                                </button>
+                                <button class="btn btn-secondary" style="width: 100%;" onclick="changeSavedCredentials()">
+                                    Change Credentials
+                                </button>
+                            </div>
+
+                            <button class="btn btn-secondary" style="width: 100%; margin-top: 0.75rem;" onclick="useOfflineMode()">
+                                Use Offline Mode Only
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                app.innerHTML = `
+                    <div class="login-container">
+                        <div class="login-card">
+                            <div class="login-title">🚀 Setup Supabase</div>
+                            <div class="login-text">
+                                Connect to Supabase for cloud sync and multi-user support. Your credentials will be saved.
+                            </div>
+
+                            <div class="info-box">
+                                📝 <strong>First time only:</strong> After entering credentials once, they'll be saved automatically.
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Supabase Project URL</label>
+                                <input type="text" class="form-input" id="url-input" placeholder="https://xxxxx.supabase.co">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Supabase Anon Key</label>
+                                <input type="password" class="form-input" id="key-input" placeholder="eyJhbGciOiJIUzI1NiIs...">
+                            </div>
+
+                            <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;" onclick="connectSupabase()">
+                                Save & Connect to Supabase
+                            </button>
+
+                            <button class="btn btn-secondary" style="width: 100%;" onclick="useOfflineMode()">
+                                Use Offline Mode Only (No Cloud)
+                            </button>
+
+                            <div style="margin-top: 1.5rem; padding: 1rem; background: #f5f5f5; border-radius: 6px; font-size: 12px; color: #666; line-height: 1.6;">
+                                <strong>📱 Offline Mode:</strong><br>
+                                • Works without internet<br>
+                                • Data saved locally<br>
+                                • Syncs when you go online
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('url-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') connectSupabase();
+                });
+                document.getElementById('key-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') connectSupabase();
+                });
+            }
+        }
+
+        function continueWithSavedCredentials() {
+            initSupabase();
+        }
+
+        function changeSavedCredentials() {
+            localStorage.removeItem(SUPABASE_URL_KEY);
+            localStorage.removeItem(SUPABASE_KEY_KEY);
+            localStorage.removeItem(CLOUD_ENABLED_KEY);
+            showSetupScreen();
+        }
+
+        async function connectSupabase() {
+            const url = document.getElementById('url-input').value.trim();
+            const key = document.getElementById('key-input').value.trim();
+
+            if (!url || !key) {
+                alert('Please enter both URL and Key');
+                return;
+            }
+
+            if (!url.includes('supabase.co')) {
+                alert('Invalid Supabase URL');
+                return;
+            }
+
+            localStorage.setItem(SUPABASE_URL_KEY, url);
+            localStorage.setItem(SUPABASE_KEY_KEY, key);
+            localStorage.setItem(CLOUD_ENABLED_KEY, 'true');
+
+            alert('✅ Credentials saved! They will not expire and will be used automatically next time.');
+
+            await initSupabase();
+        }
+
+        function useOfflineMode() {
+            localStorage.setItem(CLOUD_ENABLED_KEY, 'false');
+            localStorage.removeItem(SUPABASE_URL_KEY);
+            localStorage.removeItem(SUPABASE_KEY_KEY);
+            currentUser = { id: 'offline_user_' + Date.now(), email: 'offline@local' };
+            loadOfflineTasks();
+            renderApp();
+        }
+
+        function showLoginScreen() {
+            app.innerHTML = `
+                <div class="login-container">
+                    <div class="login-card">
+                        <div class="login-title">👤 Login / Sign Up</div>
+                        <div class="login-text">
+                            Login to sync tasks across devices. Credentials are saved on this device.
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-input" id="email-input" placeholder="you@example.com">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="password-input" placeholder="Enter password">
+                        </div>
+
+                        <button class="btn btn-primary" style="width: 100%; margin-bottom: 0.75rem;" onclick="handleLogin()">
+                            Login
+                        </button>
+
+                        <button class="btn btn-secondary" style="width: 100%; margin-bottom: 0.75rem;" onclick="handleSignUp()">
+                            Create Account
+                        </button>
+
+                        <button class="btn btn-secondary" style="width: 100%; margin-bottom: 0.75rem;" onclick="changeSavedCredentials()">
+                            ⚙️ Change Supabase Settings
+                        </button>
+
+                        <button class="btn btn-secondary" style="width: 100%;" onclick="useOfflineMode()">
+                            Use Offline Mode
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('email-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+            document.getElementById('password-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value;
+
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+                
+                currentUser = data.user;
+                await loadTasks();
+                renderApp();
+            } catch (error) {
+                alert('Login failed: ' + error.message);
+            }
+        }
+
+        async function handleSignUp() {
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value;
+
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase.auth.signUp({ email, password });
+                if (error) throw error;
+                alert('✅ Account created! Please login with your credentials.');
+                document.getElementById('password-input').value = '';
+            } catch (error) {
+                alert('Sign up failed: ' + error.message);
+            }
+        }
+
+        async function loadTasks() {
+            try {
+                if (isOnline && supabase && currentUser) {
+                    const { data, error } = await supabase
+                        .from('tasks')
+                        .select('*')
+                        .eq('user_id', currentUser.id);
+
+                    if (error) throw error;
+                    tasks = data || [];
+                    saveOfflineTasks();
+                    loadPendingChanges();
+                } else {
+                    loadOfflineTasks();
+                }
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+                loadOfflineTasks();
+            }
+        }
+
+        function loadOfflineTasks() {
+            const stored = localStorage.getItem(OFFLINE_STORAGE_KEY);
+            if (stored) {
+                try {
+                    tasks = JSON.parse(stored);
+                } catch (e) {
+                    tasks = getDefaultTasks();
+                }
+            } else {
+                tasks = getDefaultTasks();
+            }
+        }
+
+        function saveOfflineTasks() {
+            localStorage.setItem(OFFLINE_STORAGE_KEY, JSON.stringify(tasks));
+        }
+
+        function loadPendingChanges() {
+            const stored = localStorage.getItem(PENDING_CHANGES_KEY);
+            if (stored) {
+                try {
+                    pendingChanges = JSON.parse(stored);
+                } catch (e) {
+                    pendingChanges = [];
+                }
+            }
+        }
+
+        function savePendingChanges() {
+            localStorage.setItem(PENDING_CHANGES_KEY, JSON.stringify(pendingChanges));
+        }
+
+        function getDefaultTasks() {
+            return [
+                { id: 'temp_' + Date.now() + '_1', title: 'Client relationship check', time: 15, priority: 'high', desc: 'Portfolio alerts, responses, touchpoints', user_id: currentUser?.id, synced: false },
+                { id: 'temp_' + Date.now() + '_2', title: 'LinkedIn content engagement', time: 20, priority: 'high', desc: 'Create/engage posts', user_id: currentUser?.id, synced: false },
+                { id: 'temp_' + Date.now() + '_3', title: 'Warm outreach', time: 25, priority: 'high', desc: 'WhatsApp messages or calls', user_id: currentUser?.id, synced: false },
+                { id: 'temp_' + Date.now() + '_4', title: 'Investwell monitoring', time: 15, priority: 'med', desc: 'Platform check, client data', user_id: currentUser?.id, synced: false },
+                { id: 'temp_' + Date.now() + '_5', title: 'Webinar or education prep', time: 30, priority: 'med', desc: 'Deck updates, script work', user_id: currentUser?.id, synced: false },
+                { id: 'temp_' + Date.now() + '_6', title: 'Google Business Profile + referrals', time: 10, priority: 'med', desc: 'GBP posts, review requests', user_id: currentUser?.id, synced: false }
+            ];
+        }
+
+        async function createTaskLocal(taskData) {
+            const task = {
+                ...taskData,
+                id: 'temp_' + Date.now(),
+                user_id: currentUser.id,
+                synced: false,
+                created_at: new Date().toISOString()
+            };
+
+            tasks.push(task);
+            saveOfflineTasks();
+
+            pendingChanges.push({ type: 'create', task });
+            savePendingChanges();
+
+            if (isOnline) {
+                syncPendingChanges();
+            }
+
+            return task;
+        }
+
+        async function updateTaskLocal(taskId, updates) {
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                Object.assign(task, updates);
+                saveOfflineTasks();
+
+                pendingChanges.push({ type: 'update', taskId, updates });
+                savePendingChanges();
+
+                if (isOnline) {
+                    syncPendingChanges();
+                }
+            }
+        }
+
+        async function deleteTaskLocal(taskId) {
+            tasks = tasks.filter(t => t.id !== taskId);
+            saveOfflineTasks();
+
+            pendingChanges.push({ type: 'delete', taskId });
+            savePendingChanges();
+
+            if (isOnline) {
+                syncPendingChanges();
+            }
+        }
+
+        async function syncPendingChanges() {
+            if (!isOnline || !supabase || !currentUser || pendingChanges.length === 0 || isSyncing) {
+                return;
+            }
+
+            isSyncing = true;
+            updateStatusIndicator();
+
+            try {
+                for (const change of pendingChanges) {
+                    if (change.type === 'create') {
+                        const { id, synced, ...taskData } = change.task;
+                        const { data, error } = await supabase
+                            .from('tasks')
+                            .insert([taskData])
+                            .select();
+
+                        if (!error && data) {
+                            const localTask = tasks.find(t => t.id === change.task.id);
+                            if (localTask) {
+                                localTask.id = data[0].id;
+                                localTask.synced = true;
+                            }
+                        }
+                    } else if (change.type === 'update') {
+                        await supabase
+                            .from('tasks')
+                            .update(change.updates)
+                            .eq('id', change.taskId)
+                            .eq('user_id', currentUser.id);
+                    } else if (change.type === 'delete') {
+                        await supabase
+                            .from('tasks')
+                            .delete()
+                            .eq('id', change.taskId)
+                            .eq('user_id', currentUser.id);
+                    }
+                }
+
+                pendingChanges = [];
+                savePendingChanges();
+                saveOfflineTasks();
+
+                showSyncNotification('✅ All changes synced to cloud!');
+            } catch (error) {
+                console.error('Sync error:', error);
+                showSyncNotification('⚠️ Sync failed, will retry later');
+            } finally {
+                isSyncing = false;
+                updateStatusIndicator();
+            }
+        }
+
+        function showSyncNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'sync-indicator';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => notification.remove(), 3000);
+        }
+
+        function updateStatusIndicator() {
+            const indicator = document.querySelector('.status-indicator');
+            if (!indicator) return;
+
+            if (isSyncing) {
+                indicator.className = 'status-indicator status-syncing';
+                indicator.innerHTML = '<span class="status-dot"></span> Syncing...';
+            } else if (isOnline) {
+                indicator.className = 'status-indicator status-online';
+                indicator.innerHTML = '<span class="status-dot"></span> Online';
+                if (pendingChanges.length > 0) {
+                    indicator.innerHTML += ` (${pendingChanges.length} pending)`;
+                }
+            } else {
+                indicator.className = 'status-indicator status-offline';
+                indicator.innerHTML = '<span class="status-dot"></span> Offline';
+                if (pendingChanges.length > 0) {
+                    indicator.innerHTML += ` (${pendingChanges.length} pending)`;
+                }
+            }
+        }
+
+        function isTaskCompleted(taskId) {
+            const completionKey = COMPLETION_KEY + taskId + '_' + currentDate;
+            return localStorage.getItem(completionKey) === 'true';
+        }
+
+        async function toggleTaskCompletion(taskId) {
+            const completionKey = COMPLETION_KEY + taskId + '_' + currentDate;
+            const isCompleted = isTaskCompleted(taskId);
+
+            if (isCompleted) {
+                localStorage.removeItem(completionKey);
+            } else {
+                localStorage.setItem(completionKey, 'true');
+            }
+            renderApp();
+        }
+
+        async function deleteTask(taskId) {
+            if (confirm('Delete this task?')) {
+                await deleteTaskLocal(taskId);
+                renderApp();
+            }
+        }
+
+        function openEditModal(taskId) {
+            editingTaskId = taskId;
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            // Create a unique modal with proper ID handling
+            const modalId = 'edit-modal-' + Date.now();
+            const titleInputId = 'edit-title-' + Date.now();
+            const descInputId = 'edit-desc-' + Date.now();
+            const timeInputId = 'edit-time-' + Date.now();
+            const priorityInputId = 'edit-priority-' + Date.now();
+
+            const modalHtml = `
+                <div id="${modalId}" class="modal-overlay" onclick="closeEditModal('${modalId}', event)">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">Edit Task</div>
+                        <div class="form-group">
+                            <label class="form-label">Task Title</label>
+                            <input type="text" class="form-input" id="${titleInputId}" value="${task.title || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-textarea" id="${descInputId}">${task.desc || ''}</textarea>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Time (minutes)</label>
+                                <input type="number" class="form-input" id="${timeInputId}" value="${task.time || 30}" min="5">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select" id="${priorityInputId}">
+                                    <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
+                                    <option value="med" ${task.priority === 'med' ? 'selected' : ''}>Medium</option>
+                                    <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button class="btn btn-secondary" onclick="closeEditModal('${modalId}')">Cancel</button>
+                            <button class="btn btn-primary" onclick="saveEditTask('${modalId}', '${titleInputId}', '${descInputId}', '${timeInputId}', '${priorityInputId}')">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = modalHtml;
+            document.body.appendChild(tempDiv.firstElementChild);
+        }
+
+        function closeEditModal(modalId, event) {
+            if (event && event.target.id !== modalId) return;
+            const modal = document.getElementById(modalId);
+            if (modal) modal.remove();
+        }
+
+        async function saveEditTask(modalId, titleId, descId, timeId, priorityId) {
+            const title = document.getElementById(titleId).value.trim();
+            const desc = document.getElementById(descId).value.trim();
+            const time = parseInt(document.getElementById(timeId).value) || 30;
+            const priority = document.getElementById(priorityId).value;
+
+            if (!title) {
+                alert('Please enter a task title');
+                return;
+            }
+
+            await updateTaskLocal(editingTaskId, { title, desc, time, priority });
+            editingTaskId = null;
+            closeEditModal(modalId);
+            renderApp();
+        }
+
+        function renderApp() {
+            let completed = 0;
+            let totalTime = 0;
+
+            tasks.forEach(task => {
+                if (isTaskCompleted(task.id)) completed++;
+                totalTime += task.time;
+            });
+
+            const rate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+
+            let tasksHtml = '';
+            tasks.forEach(task => {
+                const isCompleted = isTaskCompleted(task.id);
+                const priorityColor = { high: '#fce4ec', med: '#fff3e0', low: '#e8f5e9' }[task.priority];
+                const priorityText = { high: '⚡ High', med: '• Medium', low: '↓ Low' }[task.priority];
+                const hasPendingChanges = pendingChanges.some(c => c.taskId === task.id || (c.task && c.task.id === task.id));
+
+                tasksHtml += `
+                    <div class="task-card ${hasPendingChanges ? 'pending' : ''}">
+                        <div class="task-checkbox ${isCompleted ? 'checked' : ''}" onclick="toggleTaskCompletion('${task.id}')">
+                            ${isCompleted ? '✓' : ''}
+                        </div>
+                        <div class="task-content">
+                            <div class="task-title" style="${isCompleted ? 'text-decoration: line-through; color: #999;' : ''}">${task.title}</div>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                                <span class="btn btn-secondary btn-small" style="padding: 0.35rem 0.65rem; margin: 0; background: ${priorityColor}; color: #333;">${priorityText}</span>
+                                <span class="btn btn-secondary btn-small" style="padding: 0.35rem 0.65rem; margin: 0;">⏱ ${task.time}min</span>
+                            </div>
+                            ${task.desc ? `<div style="font-size: 13px; color: #666;">${task.desc}</div>` : ''}
+                        </div>
+                        <div class="task-actions">
+                            <button class="task-btn" onclick="openEditModal('${task.id}')">✏️ Edit</button>
+                            <button class="task-btn task-btn-delete" onclick="deleteTask('${task.id}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            let mainContent = '';
+
+            if (currentView === 'daily') {
+                mainContent = `
+                    <div class="content">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Tasks Completed</div>
+                                <div class="stat-value">${completed}/${tasks.length}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Total Time</div>
+                                <div class="stat-value">${totalTime}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Completion Rate</div>
+                                <div class="stat-value">${rate}%</div>
+                            </div>
+                        </div>
+
+                        <div class="tasks-section">
+                            <div class="tasks-header">
+                                <div>Today's Tasks</div>
+                                <div style="font-size: 12px; color: #999;">${tasks.length} tasks</div>
+                            </div>
+                            ${tasksHtml || '<div class="empty-state">No tasks. Click "+ Add Task" to get started!</div>'}
+                        </div>
+                    </div>
+                `;
+            } else if (currentView === 'weekly') {
+                mainContent = renderWeeklyView(completed, totalTime, rate);
+            } else if (currentView === 'monthly') {
+                mainContent = renderMonthlyView(completed, totalTime, rate);
+            }
+
+            app.innerHTML = `
+                <div class="app-container">
+                    <div class="sidebar">
+                        <div style="margin-bottom: 1.5rem;">
+                            <div class="sidebar-title">OMFI</div>
+                            <div class="sidebar-subtitle">Task Manager Pro</div>
+                            <div style="font-size: 11px; margin-top: 0.5rem; opacity: 0.6;">📱 Offline-First Cloud</div>
+                        </div>
+
+                        <div class="user-info">
+                            <div class="user-email">👤 ${currentUser.email || 'Offline User'}</div>
+                            <button class="btn btn-secondary btn-small" style="width: 100%; margin-top: 0.5rem;" onclick="logout()">Logout</button>
+                        </div>
+                        
+                        <div class="sidebar-section">
+                            <div class="sidebar-label">Dashboard</div>
+                            <button class="nav-btn ${currentView === 'daily' ? 'active' : ''}" onclick="switchView('daily')">📋 Daily</button>
+                            <button class="nav-btn ${currentView === 'weekly' ? 'active' : ''}" onclick="switchView('weekly')">📅 Weekly</button>
+                            <button class="nav-btn ${currentView === 'monthly' ? 'active' : ''}" onclick="switchView('monthly')">📊 Monthly</button>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <button class="btn btn-secondary" style="width: 100%; font-size: 12px;" onclick="syncPendingChanges()">
+                                🔄 Sync Now
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="main-content">
+                        <div class="header">
+                            <div>
+                                <div class="header-title">${currentView === 'daily' ? '📋 Daily Dashboard' : currentView === 'weekly' ? '📅 Weekly View' : '📊 Monthly View'}</div>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                                <div class="status-indicator status-online">
+                                    <span class="status-dot"></span> Online
+                                </div>
+                                ${currentView === 'daily' ? `<input type="date" id="date-input" class="form-input" style="padding: 0.75rem 1rem; width: 150px;">` : ''}
+                                <button class="btn btn-primary" onclick="openAddTaskModal()">+ Add Task</button>
+                            </div>
+                        </div>
+
+                        ${mainContent}
+                    </div>
+                </div>
+            `;
+
+            updateStatusIndicator();
+
+            if (currentView === 'daily') {
+                document.getElementById('date-input').valueAsDate = new Date(currentDate);
+                document.getElementById('date-input').addEventListener('change', function() {
+                    currentDate = this.value;
+                    renderApp();
+                });
+            }
+        }
+
+        function renderWeeklyView(completed, totalTime, rate) {
+            const today = new Date(currentDate);
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - today.getDay());
+
+            let weekHtml = '<div class="week-grid">';
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(startOfWeek);
+                date.setDate(startOfWeek.getDate() + i);
+                const dateStr = date.toISOString().split('T')[0];
+                const isToday = dateStr === currentDate;
+
+                let dayTasks = 0;
+                let dayCompleted = 0;
+                tasks.forEach(task => {
+                    dayTasks++;
+                    if (localStorage.getItem(COMPLETION_KEY + task.id + '_' + dateStr) === 'true') {
+                        dayCompleted++;
+                    }
+                });
+
+                const dayPercent = dayTasks > 0 ? Math.round((dayCompleted / dayTasks) * 100) : 0;
+
+                weekHtml += `
+                    <div class="week-day ${isToday ? 'today' : ''}" onclick="setCurrentDate('${dateStr}')">
+                        <div class="week-day-name">${days[i]}</div>
+                        <div class="week-day-date">${date.getDate()}</div>
+                        <div class="week-day-stat">${dayCompleted}/${dayTasks} (${dayPercent}%)</div>
+                    </div>
+                `;
+            }
+            weekHtml += '</div>';
+
+            return `
+                <div class="content">
+                    <div class="nav-controls">
+                        <button class="btn btn-secondary" onclick="prevWeek()">← Prev Week</button>
+                        <button class="btn btn-secondary" onclick="thisWeek()">This Week</button>
+                        <button class="btn btn-secondary" onclick="nextWeek()">Next Week →</button>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Week Completed</div>
+                            <div class="stat-value">${completed}/${tasks.length}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Time</div>
+                            <div class="stat-value">${totalTime}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Avg Completion</div>
+                            <div class="stat-value">${rate}%</div>
+                        </div>
+                    </div>
+
+                    <div class="tasks-section">
+                        <div class="tasks-header">Weekly Overview</div>
+                        ${weekHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderMonthlyView(completed, totalTime, rate) {
+            const today = new Date(currentDate);
+            const year = today.getFullYear();
+            const month = today.getMonth();
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - firstDay.getDay());
+
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            let headerHtml = '<div class="calendar-header">';
+            dayNames.forEach(day => {
+                headerHtml += `<div class="calendar-header-cell">${day}</div>`;
+            });
+            headerHtml += '</div>';
+
+            let calendarHtml = '<div class="calendar-grid">';
+            let currentDate_temp = new Date(startDate);
+
+            for (let i = 0; i < 42; i++) {
+                const dateStr = currentDate_temp.toISOString().split('T')[0];
+                const isToday = dateStr === currentDate;
+                const isOtherMonth = currentDate_temp.getMonth() !== month;
+
+                let dayTasks = 0;
+                let dayCompleted = 0;
+                tasks.forEach(task => {
+                    dayTasks++;
+                    if (localStorage.getItem(COMPLETION_KEY + task.id + '_' + dateStr) === 'true') {
+                        dayCompleted++;
+                    }
+                });
+
+                calendarHtml += `
+                    <div class="calendar-cell ${isToday ? 'today' : ''} ${isOtherMonth ? 'other-month' : ''}" onclick="setCurrentDate('${dateStr}')">
+                        <div class="calendar-cell-date">${currentDate_temp.getDate()}</div>
+                        ${dayTasks > 0 ? `<div class="calendar-cell-count">${dayCompleted}/${dayTasks}</div>` : ''}
+                    </div>
+                `;
+
+                currentDate_temp.setDate(currentDate_temp.getDate() + 1);
+            }
+            calendarHtml += '</div>';
+
+            return `
+                <div class="content">
+                    <div class="nav-controls">
+                        <button class="btn btn-secondary" onclick="prevMonth()">← Prev Month</button>
+                        <button class="btn btn-secondary" onclick="thisMonth()">This Month</button>
+                        <button class="btn btn-secondary" onclick="nextMonth()">Next Month →</button>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Month Completed</div>
+                            <div class="stat-value">${completed}/${tasks.length}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Time</div>
+                            <div class="stat-value">${totalTime}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Avg Completion</div>
+                            <div class="stat-value">${rate}%</div>
+                        </div>
+                    </div>
+
+                    <div class="tasks-section">
+                        <div class="tasks-header">${firstDay.toLocaleString('default', { month: 'long', year: 'numeric' })}</div>
+                        ${headerHtml}
+                        ${calendarHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function switchView(view) {
+            currentView = view;
+            renderApp();
+        }
+
+        function setCurrentDate(date) {
+            currentDate = date;
+            if (currentView === 'daily') {
+                renderApp();
+            } else {
+                currentView = 'daily';
+                renderApp();
+            }
+        }
+
+        function prevWeek() {
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() - 7);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function thisWeek() {
+            currentDate = new Date().toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function nextWeek() {
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() + 7);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function prevMonth() {
+            const date = new Date(currentDate);
+            date.setMonth(date.getMonth() - 1);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function thisMonth() {
+            currentDate = new Date().toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function nextMonth() {
+            const date = new Date(currentDate);
+            date.setMonth(date.getMonth() + 1);
+            currentDate = date.toISOString().split('T')[0];
+            renderApp();
+        }
+
+        function openAddTaskModal() {
+            const modalId = 'add-modal-' + Date.now();
+            const titleInputId = 'add-title-' + Date.now();
+            const descInputId = 'add-desc-' + Date.now();
+            const timeInputId = 'add-time-' + Date.now();
+            const priorityInputId = 'add-priority-' + Date.now();
+
+            const modalHtml = `
+                <div id="${modalId}" class="modal-overlay" onclick="closeAddModal('${modalId}', event)">
+                    <div class="modal" onclick="event.stopPropagation()">
+                        <div class="modal-title">Add New Task</div>
+                        <div class="form-group">
+                            <label class="form-label">Task Title</label>
+                            <input type="text" class="form-input" id="${titleInputId}" placeholder="What needs to be done?">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-textarea" id="${descInputId}" placeholder="Add details..."></textarea>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Time (minutes)</label>
+                                <input type="number" class="form-input" id="${timeInputId}" value="30" min="5">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select class="form-select" id="${priorityInputId}">
+                                    <option value="low">Low</option>
+                                    <option value="med" selected>Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button class="btn btn-secondary" onclick="closeAddModal('${modalId}')">Cancel</button>
+                            <button class="btn btn-primary" onclick="createTask('${modalId}', '${titleInputId}', '${descInputId}', '${timeInputId}', '${priorityInputId}')">Create Task</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = modalHtml;
+            document.body.appendChild(tempDiv.firstElementChild);
+        }
+
+        function closeAddModal(modalId, event) {
+            if (event && event.target.id !== modalId) return;
+            const modal = document.getElementById(modalId);
+            if (modal) modal.remove();
+        }
+
+        async function createTask(modalId, titleId, descId, timeId, priorityId) {
+            const title = document.getElementById(titleId).value.trim();
+            const desc = document.getElementById(descId).value.trim();
+            const time = parseInt(document.getElementById(timeId).value) || 30;
+            const priority = document.getElementById(priorityId).value;
+
+            if (!title) {
+                alert('Please enter a task title');
+                return;
+            }
+
+            await createTaskLocal({ title, desc, time, priority });
+            closeAddModal(modalId);
+            renderApp();
+        }
+
+        async function logout() {
+            if (confirm('Logout?')) {
+                if (supabase) {
+                    await supabase.auth.signOut();
+                }
+                currentUser = null;
+                tasks = [];
+                pendingChanges = [];
+                showLoginScreen();
+            }
+        }
+    </script>
+</body>
+</html>
